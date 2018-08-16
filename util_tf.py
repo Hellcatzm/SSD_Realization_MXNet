@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow.python.ops import control_flow_ops
 
+slim = tf.contrib.slim
 
 _R_MEAN = 123.68
 _G_MEAN = 116.78
@@ -23,6 +24,50 @@ def tensor_shape(x, rank=3):
         # list，有定义的给数字，没有的给tensor
         return [s if s is not None else d
                 for s, d in zip(static_shape, dynamic_shape)]
+
+
+def abs_smooth(x):
+    """Smoothed absolute function. Useful to compute an L1 smooth error.
+
+    Define as:
+        x^2 / 2         if abs(x) < 1
+        abs(x) - 0.5    if abs(x) > 1
+    We use here a differentiable definition using min(x) and abs(x). Clearly
+    not optimal, but good enough for our purpose!
+    """
+    absx = tf.abs(x)
+    minx = tf.minimum(absx, 1)
+    r = 0.5 * ((absx - 1) * minx + absx)
+    return r
+
+
+def reshape_list(l, shape=None):
+    """Reshape list of (list): 1D to 2D or the other way around.
+
+    Args:
+      l: List or List of list.
+      shape: 1D or 2D shape.
+    Return
+      Reshaped list.
+    """
+    r = []
+    if shape is None:
+        # Flatten everything.
+        for a in l:
+            if isinstance(a, (list, tuple)):
+                r = r + list(a)
+            else:
+                r.append(a)
+    else:
+        # Reshape to list of list.
+        i = 0
+        for s in shape:
+            if s == 1:
+                r.append(l[i])
+            else:
+                r.append(l[i:i + s])
+            i += s
+    return r
 
 
 def resize_image(image, size,
@@ -181,4 +226,56 @@ def apply_with_random_selector(x, func, num_cases):
     return control_flow_ops.merge([
             func(control_flow_ops.switch(x, tf.equal(sel, case))[1], case)
             for case in range(num_cases)])[0]
+
+
+def get_init_fn(checkpoint_path,
+                train_dir,
+                checkpoint_exclude_scopes,
+                checkpoint_model_scope,
+                model_name,
+                ignore_missing_vars):
+    """Returns a function run by the chief worker to warm-start the training.
+    Note that the init_fn is only run when initializing the model during the very
+    first global step.
+
+    Returns:
+      An init function run by the supervisor.
+    """
+    if checkpoint_path is None:
+        return None
+    # Warn the user if a checkpoint exists in the train_dir. Then ignore.
+    if tf.train.latest_checkpoint(train_dir):
+        tf.logging.info(
+            'Ignoring --checkpoint_path because a checkpoint already exists in %s'
+            % train_dir)
+        return None
+
+    exclusions = []
+    if checkpoint_exclude_scopes:
+        exclusions = [scope.strip()
+                      for scope in checkpoint_exclude_scopes.split(',')]
+    variables_to_restore = []
+    for var in slim.get_model_variables():
+        excluded = False
+        for exclusion in exclusions:
+            if var.op.name.startswith(exclusion):
+                excluded = True
+                break
+        if not excluded:
+            variables_to_restore.append(var)
+    # Change model scope if necessary.
+    if checkpoint_model_scope is not None:
+        variables_to_restore = \
+            {var.op.name.replace(model_name,
+                                 checkpoint_model_scope): var
+             for var in variables_to_restore}
+
+    if tf.gfile.IsDirectory(checkpoint_path):
+        checkpoint_path = tf.train.latest_checkpoint(checkpoint_path)
+    tf.logging.info('Fine-tuning from %s. Ignoring missing vars: %s' % (checkpoint_path, ignore_missing_vars))
+
+    return slim.assign_from_checkpoint_fn(
+        checkpoint_path,
+        variables_to_restore,
+        ignore_missing_vars=ignore_missing_vars)
 

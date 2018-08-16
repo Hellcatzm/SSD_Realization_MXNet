@@ -51,7 +51,7 @@ def get_split(tfr_path, tfr_pattren, num_classes=21, num_samples=17125):
 
 def tfr_read(tfr_dir='./TFR_Data',
              pattren='voc2012_*.tfrecord'):
-    dataset = get_split(tfr_dir, pattren, num_classes=21)
+    dataset = get_split(tfr_dir, pattren, num_classes=21, num_samples=17125)
     provider = slim.dataset_data_provider.DatasetDataProvider(
         dataset,         # DatasetDataProvider 需要 slim.dataset.Dataset 做参数
         num_readers=2,
