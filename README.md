@@ -24,3 +24,6 @@ if normalization > 0:
     net = tf.multiply(tf.nn.l2_normalize(net, net.get_shape().ndims-1, epsilon=1e-12), scale)
 ```
 mxnet中并无对应实现，这里实现了l2_normalize并封装上面整个过程为一个新的Block类（位于脚本`util_mx.py`）。
+#### 18.8.16
+###### 工作框架搭建完毕
+两个版本的ssd已经可以正常训练，但是效果未加验明，且mxnet版本没有添加存储模块。
