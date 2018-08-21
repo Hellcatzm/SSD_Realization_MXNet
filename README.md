@@ -1,4 +1,4 @@
-## MXNet、TensorFlow双版本实现SSD
+## MXNet实现SSD
 `SSD_mini.ipynb`<br>
 [『MXNet』第八弹_物体检测之SSD](https://www.cnblogs.com/hellcat/p/9108647.html)<br>
 SSD模型原理简介，文件来自MXNet文档，作者应该是李沐，附有个人脚注方便理解。<br>
@@ -27,3 +27,6 @@ mxnet中并无对应实现，这里实现了l2_normalize并封装上面整个过
 #### 18.8.16
 ###### 工作框架搭建完毕
 两个版本的ssd已经可以正常训练，但是效果未加验明，且mxnet版本没有添加存储模块。
+#### 18.8.21
+###### 删除tensorflow相关内容
+现在这是一个单纯的MXNet框架项目，并添加了保存模型的语句。
