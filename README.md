@@ -3,6 +3,18 @@
 [『MXNet』第八弹_物体检测之SSD](https://www.cnblogs.com/hellcat/p/9108647.html)<br>
 SSD模型原理简介，文件来自MXNet文档，作者应该是李沐，附有个人脚注方便理解。<br>
 
+## 运行程序
+#### 数据准备
+将VOC2012数据解压到文件夹`VOC2012`中，注意检查下一级目录包含`Annotations`文件夹和`JPEGImages`文件夹。
+#### 生成压缩文件
+使用jupyter打开`rec_generate.ipynb`按照顺序运行即可。
+REC压缩文件处理相关介绍见：<br>
+[『MXNet』im2rec脚本使用以及数据读取](https://www.cnblogs.com/hellcat/p/9373890.html)
+#### 训练
+```python
+python train_ssd_network.py
+```
+
 ## 日志
 #### 18.8.12
 ###### 1、提交整理已完成工作
@@ -30,3 +42,8 @@ mxnet中并无对应实现，这里实现了l2_normalize并封装上面整个过
 #### 18.8.21
 ###### 删除tensorflow相关内容
 现在这是一个单纯的MXNet框架项目，并添加了保存模型的语句。
+#### 18.8.30
+###### 重新整理框架内容
+初版参照tensorflow版本过多，实际训练不能收敛。可能是两个框架流程差异（如mx的各个图片标签长度必须一致，tf图像在送入神经网络之前都是不计算bs维度的等）导致我的修改较为繁琐，增加出错几率，这里更多的使用了原汁原味的mxnet逻辑及封装，现已可以正常训练，旧版代码并未删除（因为注释较多，虽运行有问题，但对会议理解ssd工作原理还是有好处的）。<br>
+`train_ssd_network_old.py`用于保存原来的调用代码，`train_ssd_network.py`是新的训练程序入口。<br>
+`SSD_mini.ipynb`中有关于eval的代码，加上读取参数部分后可以直接拿来用。
