@@ -3,6 +3,7 @@ import numpy as np
 from collections import namedtuple
 from util_mx import *
 
+
 SSDParams = namedtuple('SSDParameters', ['img_shape',
                                          'num_classes',
                                          'feat_layers',
@@ -85,7 +86,7 @@ def ssd_model():
     for i in range(len(feat_layers)):
         if normalizations[i]:
             l2_normalizes.add(L2_normalize(512))
-        num_anchors = len(anchor_sizes[i]) + len(anchor_ratios[i])
+        num_anchors = len(anchor_sizes[i]) + len(anchor_ratios[i]) - 1
         box_predictors.add(nn.Conv2D(num_anchors * 4, 3, padding=1))
         class_predictors.add(nn.Conv2D(num_anchors * (num_classes + 1), 3, padding=1))
     model = nn.Sequential()
@@ -93,7 +94,7 @@ def ssd_model():
     return model
 
 
-def ssd_forward(feat, ssd_mod):
+def ssd_forward(feat, ssd_mod, flatten=True):
     body, class_predictors, box_predictors, l2_normalizes = ssd_mod
     anchors, class_preds, box_preds = ([] for _ in range(3))
     fls = feat_layers.copy()
@@ -107,16 +108,27 @@ def ssd_forward(feat, ssd_mod):
             feat = l2_normalizes[i-1](feat)
         class_shape = class_predictors[i-1](feat).shape
         box_shape = box_predictors[i-1](feat).shape
-        class_preds.append(
-            class_predictors[i-1](feat).transpose([0, 2, 3, 1]).reshape(
-                class_shape[0], class_shape[2], class_shape[3], class_shape[1]//(num_classes+1), (num_classes+1)))
-        box_preds.append(box_predictors[i-1](feat).transpose([0, 2, 3, 1]).reshape(
-            box_shape[0], box_shape[2], box_shape[3], box_shape[1]//4, 4))
-
+        if not flatten:
+            class_preds.append(
+                class_predictors[i-1](feat).transpose([0, 2, 3, 1]).reshape(
+                    class_shape[0], class_shape[2], class_shape[3], class_shape[1]//(num_classes+1), (num_classes+1)))
+            box_preds.append(box_predictors[i-1](feat).transpose([0, 2, 3, 1]).reshape(
+                box_shape[0], box_shape[2], box_shape[3], box_shape[1]//4, 4))
+            layer_anchors = one_layer_anchers(feat, i - 1)
+        else:
+            class_preds.append(
+                flatten_prediction(class_predictors[i - 1](feat)))
+            box_preds.append(
+                flatten_prediction(box_predictors[i - 1](feat)))
         # feat_layers索引从1开始，但是其他特征相关索引从0开始
-        layer_anchors = one_layer_anchers(feat, i-1)
+        layer_anchors = nd.contrib.MultiBoxPrior(feat, anchor_sizes[i-1], anchor_ratios[i-1])
         anchors.append(layer_anchors)
-    return anchors, class_preds, box_preds
+    if not flatten:
+        return anchors, class_preds, box_preds
+    else:
+        return concat_predictions(anchors),\
+               concat_predictions(class_preds),\
+               concat_predictions(box_preds)
 
 
 class SSDNet(nn.Block):
@@ -124,8 +136,18 @@ class SSDNet(nn.Block):
         super(SSDNet, self).__init__(**kwargs)
         self.model = ssd_model()
 
-    def forward(self, imgs, *args):
-        anchors, class_preds, box_preds = ssd_forward(imgs, self.model)
+    def forward(self, imgs, flatten, *args):
+        """
+        :param imgs:
+        :param flatten:
+        :param args:
+        :return:
+        anchors, 检测框坐标，[1，n，4]
+        class_preds, 各图片各检测框分类情况，[bs，n，num_cls+1]
+        box_preds, 各图片检测框坐标预测情况，[bs, n*4]
+        """
+        anchors, class_preds, box_preds = ssd_forward(imgs, self.model, flatten)
+        class_preds = class_preds.reshape(shape=(0, -1, num_classes + 1))
         return anchors, class_preds, box_preds
 
 
@@ -162,7 +184,7 @@ def one_layer_anchers(feat, i):
         # plt.show()
         # print(h, w)
 
-        return y, x, h, w
+        return tuple(nd.array(ar) for ar in (y, x, h, w))
 
 
 def bboxes_encode(labels,
@@ -234,7 +256,7 @@ def _bboxes_encode_layer(labels,  # (b, n,)
         jaccard = inter_vol / union_vol  # 交集/并集，即IOU
         return jaccard  # (b, m, m, k)
 
-    for i in range(labels.shape[1]):
+    for i in range(labels.shape[1]):  # 对图像上的obj进行循环
         # Jaccard score.
         label = labels[:, i]  # 当前bs图片上第i个对象的标签
         bbox = bboxes[:, i]  # 当前bs图片上第i个对象的真实框bbox
@@ -244,7 +266,7 @@ def _bboxes_encode_layer(labels,  # (b, n,)
         mask = nd.greater(jaccard, feat_scores)  # 掩码矩阵，IOU大于历史得分的为True，(b, m, m, k)
         try:
             mask = nd.logical_and(mask, (feat_scores > -0.5))
-            mask = nd.logical_and(mask, (label < num_classes))  # 不太懂，label应该必定小于类别数
+            mask = nd.logical_and(mask, (label < num_classes).reshape(label.shape[0], 1, 1, 1))  # 不太懂，label应该必定小于类别数
         except BaseException as e:
             mask = logical_and(mask, (feat_scores > -0.5))
             mask = logical_and(mask, (label.reshape(label.shape[0], 1, 1, 1) < num_classes))
@@ -319,7 +341,7 @@ def data_reshape(logits, localisations,  # 预测类别，位置
     localisations = nd.concat(*flocalisations, dim=0)
     glocalisations = nd.concat(*fglocalisations, dim=0)
 
-    print(logits.shape, gclasses.shape, gscores.shape, localisations.shape, glocalisations.shape)
+    # print(logits.shape, gclasses.shape, gscores.shape, localisations.shape, glocalisations.shape)
 
     dtype = logits.dtype
     pmask = gscores > match_threshold  # (全部搜索框数目, 21)，类别搜索框和真实框IOU大于阈值
@@ -330,7 +352,7 @@ def data_reshape(logits, localisations,  # 预测类别，位置
     no_classes = nd.cast(pmask, np.int32)
     predictions = nd.softmax(logits)  # 此时每一行的21个数转化为概率
     nmask = logical_and(logical_not(pmask),
-                        gscores > -0.5)  # IOU达不到阈值的类别搜索框位置记1
+                           gscores > -0.5)  # IOU达不到阈值的类别搜索框位置记1
     fnmask = nd.cast(nmask, dtype)
     nvalues = nd.where(nmask,
                        predictions[:, 0],  # 框内无物体标记为背景预测概率
@@ -363,10 +385,28 @@ def data_reshape(logits, localisations,  # 预测类别，位置
     return logits, gclasses, no_classes, fpmask, fnmask, localisations, glocalisations
 
 
+def training_targets(anchors, class_preds, labels):
+    """
+
+    得到的全部边框坐标
+    得到的全部边框各个类别得分
+    真实类别及对应边框坐标
+    :param anchors: 全部的检测框坐标，[1，n，4]
+    :param class_preds:当前batch检测框分类结果，[bs，n，num_cls+1(背景0)]
+    :param labels:真实数据，[bs，num_obj，5]
+    :return:
+    box_target, [bs, n*4]
+    box_mask, [bs, n*4]
+    cls_target, [bs，n]
+    """
+    class_preds = class_preds.transpose(axes=(0,2,1))
+    return nd.contrib.MultiBoxTarget(anchors, labels, class_preds, overlap_threshold=0.5)
+
 if __name__ == '__main__':
     X = mx.ndarray.random.uniform(shape=(1, 1, 304, 304))
-    ssd = ssd_model()
-    for model in ssd:
-        model.initialize()
-    a, c, b = ssd_forward(X, ssd)
+    ssd = SSDNet()
+    ssd.initialize()
+    a, c, b = ssd(X, ssd)
+    print(a.shape, c.shape, b.shape)
+
 

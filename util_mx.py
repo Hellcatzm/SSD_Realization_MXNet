@@ -15,6 +15,16 @@ def repeat(num_convs, num_channel, pool=True):
     return block
 
 
+def flatten_prediction(pred):
+    # 图片数，像素数×框数×分类数：值为得分
+    return pred.transpose(axes=(0,2,3,1)).flatten()
+
+
+def concat_predictions(preds):
+    # 图片数，(全部层的)像素数×框数×分类数：值为得分
+    return nd.concat(*preds, dim=1)
+
+
 class L2_normalize(nn.Block):
     def __init__(self, feat_channels, axis=1, epslion=1e-12, **kwargs):
         """
@@ -33,7 +43,7 @@ class L2_normalize(nn.Block):
         square_sum = nd.sum(nd.square(feat), axis=self.axis, keepdims=True)
         inv_norm = nd.rsqrt(nd.maximum(square_sum, self.epsilon))
         l2_res = nd.multiply(feat, inv_norm)
-        print(l2_res.shape)
+        # print(l2_res.shape)
         return nd.multiply(l2_res.transpose([0, 2, 3, 1]), self.scale.data()).transpose([0, 3, 1, 2])
 
 
