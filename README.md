@@ -17,7 +17,7 @@ python train_ssd_network.py
 ```
 
 ## 简要说明
-和TensorFlow不一致，为了适应MXNet的API，bounding box以左上角和右下角表示（tf中用中心点和宽高表示）<br>
+和TensorFlow不一致，为了适应MXNet的API，bounding box以左上角和右下角表示（而不是用中心点和宽高表示）。<br>
 SSD架构主要有四个部分，网络设计、搜索框设计、学习目标处理、损失函数实现。<br>
 ###### 网络设计
 重点在于正常前向网络中挑选出的特征层分别添加两个卷积出口：分类和回归出口，用于对应后面的每个搜索框的各个类别得分、以及4个坐标值。<br>
