@@ -36,10 +36,14 @@ if __name__ == '__main__':
     ssd = ssd_mx.SSDNet()
     ssd.initialize(ctx=ctx)  # mx.init.Xavier(magnitude=2)
 
-    # cls_loss = util_mx.FocalLoss()
-    # box_loss = util_mx.SmoothL1Loss()
-    cls_loss = gloss.SoftmaxCrossEntropyLoss()
-    box_loss = gloss.L1Loss()
+    using_api = True
+    if using_api:
+        cls_loss = gloss.SoftmaxCrossEntropyLoss()
+        box_loss = gloss.L1Loss()
+    else:
+        cls_loss = util_mx.FocalLoss()
+        box_loss = util_mx.SmoothL1Loss()
+
 
     trainer = mx.gluon.Trainer(ssd.collect_params(),
                                'sgd', {'learning_rate': 0.01, 'wd': 5e-4})
@@ -70,7 +74,6 @@ if __name__ == '__main__':
 
                 loss1 = cls_loss(class_preds, cls_target)
                 loss2 = box_loss(box_preds*box_mask, box_target*box_mask)
-                # loss2 = box_loss(box_preds, box_target, box_mask)
                 loss = loss1 + loss2
             loss.backward()
             trainer.step(batch_size)

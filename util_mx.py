@@ -83,9 +83,9 @@ class SmoothL1Loss(gluon.loss.Loss):
     def __init__(self, batch_axis=0, **kwargs):
         super(SmoothL1Loss, self).__init__(None, batch_axis, **kwargs)
 
-    def hybrid_forward(self, F, output, label, mask):
+    def hybrid_forward(self, F, output, label):
         # 参数mask，屏蔽掉不需要被惩罚的负例样本
-        loss = F.smooth_l1((output - label) * mask, scalar=1.0)
+        loss = F.smooth_l1(output - label, scalar=1.0)
         return loss.mean(self._batch_axis, exclude=True)
 
 
