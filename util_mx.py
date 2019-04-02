@@ -3,7 +3,7 @@ import numpy as np
 from mxnet import gluon
 from mxnet.gluon import nn
 import mxnet.ndarray as nd
-
+import mxnet.gluon.loss as gloss
 
 def repeat(num_convs, num_channel, pool=True):
     block = nn.Sequential()

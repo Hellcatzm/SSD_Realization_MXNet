@@ -4,6 +4,7 @@ import mxnet.image as image
 import ssd_vgg300_mx as ssd_mx
 import util_mx
 import time
+import mxnet.gluon.loss as gloss
 
 
 def get_iterators(data_shape, batch_size):
@@ -28,15 +29,17 @@ def get_iterators(data_shape, batch_size):
 
 if __name__ == '__main__':
     batch_size = 4
-    ctx = mx.cpu(0)
-    # ctx = mx.gpu(0)
+    # ctx = mx.cpu(0)
+    ctx = mx.gpu(0)
     # box_metric = mx.MAE()
     cls_metric = mx.metric.Accuracy()
     ssd = ssd_mx.SSDNet()
     ssd.initialize(ctx=ctx)  # mx.init.Xavier(magnitude=2)
 
-    cls_loss = util_mx.FocalLoss()
-    box_loss = util_mx.SmoothL1Loss()
+    # cls_loss = util_mx.FocalLoss()
+    # box_loss = util_mx.SmoothL1Loss()
+    cls_loss = gloss.SoftmaxCrossEntropyLoss()
+    box_loss = gloss.L1Loss()
 
     trainer = mx.gluon.Trainer(ssd.collect_params(),
                                'sgd', {'learning_rate': 0.01, 'wd': 5e-4})
@@ -66,15 +69,17 @@ if __name__ == '__main__':
                 box_target, box_mask, cls_target = ssd_mx.training_targets(anchors, class_preds, y)
 
                 loss1 = cls_loss(class_preds, cls_target)
-                loss2 = box_loss(box_preds, box_target, box_mask)
+                loss2 = box_loss(box_preds*box_mask, box_target*box_mask)
+                # loss2 = box_loss(box_preds, box_target, box_mask)
                 loss = loss1 + loss2
             loss.backward()
             trainer.step(batch_size)
-            if i % 1 == 0:
+            if i % 100 == 0:
                 duration = time.time() - start_time
                 examples_per_sec = batch_size / duration
                 sec_per_batch = float(duration)
-                format_str = "[*] step %d,  loss=%.2f (%.1f examples/sec; %.3f sec/batch)"
-                print(format_str % (i, nd.sum(loss).asscalar(), examples_per_sec, sec_per_batch))
-            if i % 500 == 0:
-                ssd.model.save_parameters('model_mx_{}.params'.format(epoch))
+                format_str = "[*] epoch %d step %d,  loss=%.5f (%.1f examples/sec; %.3f sec/batch)"
+                print(format_str % (epoch, i, nd.sum(loss).asscalar(), examples_per_sec, sec_per_batch))
+            if i % 1000 == 0:
+                ssd.model.save_parameters('model_mx_{}_{}.params'.format(epoch, i))
+
